@@ -1,0 +1,219 @@
+# Implementation Plan
+
+- [x] 1. Add role encoding to observation space
+  - [x] 1.1 Create role encoding utility function in common/utils.py
+    - Implement add_role_encoding() that prepends role feature to kinematics
+    - Support role values: 0.0 (ambulance), 1.0 (normal), 2.0 (NPC)
+    - Handle reshaping from (56,) to (8, 7) to (8, 8) to (64,)
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
+  - [x] 1.2 Update environment configuration to include role feature
+    - Modify configs/envs/highway.yaml to add 'role' to features list
+    - Update observation_config documentation
+    - _Requirements: 2.1_
+  - [x] 1.3 Integrate role encoding into data collection pipeline
+    - Modify data_collection/collect_data.py to call add_role_encoding()
+    - Update observation processing before expert heuristic
+    - _Requirements: 2.4_
+
+- [x] 2. Create heterogeneous environment configuration
+  - [x] 2.1 Create configs/envs/highway_heterogeneous.yaml
+    - Copy highway.yaml as base
+    - Add heterogeneous_agents: true flag
+    - Add agent_roles: [ambulance, normal, normal, normal]
+    - Add agent_colors mapping for visual distinction
+    - Update features list to include 'role'
+    - _Requirements: 1.1, 1.2, 1.3, 7.1, 7.2, 7.4, 7.5_
+  - [x] 2.2 Update common/scenario.py to parse heterogeneous config
+    - Read heterogeneous_agents flag from YAML
+    - Read agent_roles list from YAML
+    - Pass roles to environment wrapper
+    - _Requirements: 7.1, 7.2_
+  - [x] 2.3 Add configuration validation
+    - Implement validate_heterogeneous_config() in common/scenario.py
+    - Check agent_roles has exactly 4 elements
+    - Check first role is 'ambulance'
+    - Check all roles are valid ('ambulance' or 'normal')
+    - _Requirements: 7.4_
+
+- [x] 3. Implement asymmetric reward functions
+  - [x] 3.1 Add heterogeneous reward computation to common/utils.py
+    - Implement compute_heterogeneous_rewards() function
+    - Compute ambulance reward: 0.7*speed - 0.3*collision
+    - Compute normal reward: 0.5*lane_clear - 0.5*blocking
+    - _Requirements: 4.1, 4.2, 4.5, 4.6_
+  - [x] 3.2 Implement lane clearance reward helper
+    - Create compute_lane_clearance() function
+    - Return 1.0 if in different lane than ambulance, else 0.0
+    - _Requirements: 4.3_
+  - [x] 3.3 Implement blocking penalty helper
+    - Create compute_blocking_penalty() function
+    - Return 2.0 if within 20m ahead of ambulance in same lane, else 0.0
+    - _Requirements: 4.4_
+
+- [x] 4. Implement role-specific expert heuristics
+  - [x] 4.1 Create ambulance expert heuristic in data_collection/collect_data.py
+    - Implement _ambulance_expert_action() function
+    - Prioritize FASTER when front_dist > 30m
+    - Attempt lane changes when front_dist < 30m
+    - Prefer LANE_LEFT for passing
+    - _Requirements: 5.1, 5.2_
+  - [x] 4.2 Create normal agent expert heuristic
+    - Implement _normal_expert_action() function
+    - Detect ambulance within 50m behind in same lane
+    - Prioritize LANE_RIGHT to clear leftmost lanes
+    - Execute SLOWER if cannot change lanes
+    - Fallback to existing TTC-based logic when no ambulance nearby
+    - _Requirements: 5.3, 5.4, 5.5, 5.6_
+  - [x] 4.3 Update _expert_action() dispatcher
+    - Route Agent 0 to _ambulance_expert_action()
+    - Route Agents 1-3 to _normal_expert_action()
+    - Pass ambulance reference to normal expert
+    - _Requirements: 5.1, 5.3_
+
+- [x] 5. Implement HeterogeneousActor architecture
+  - [x] 5.1 Create models/heterogeneous_mappo.py
+    - Implement HeterogeneousActor class with two sub-networks
+    - Create ambulance_actor MLP (obs_dim=64, n_actions=5)
+    - Create normal_actor MLP (obs_dim=64, n_actions=5)
+    - Implement forward() with role-based routing
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.6_
+  - [x] 5.2 Implement HeterogeneousVLAActorCritic wrapper
+    - Extend VLAActorCritic with HeterogeneousActor
+    - Keep centralized critic unchanged
+    - Accept agent_roles parameter in constructor
+    - Implement forward() that routes through heterogeneous actor
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+  - [x] 5.3 Add model saving/loading for heterogeneous networks
+    - Save both ambulance_actor and normal_actor state dicts
+    - Load and validate obs_dim matches (64 for heterogeneous)
+    - _Requirements: 10.6_
+
+- [x] 6. Update CLIP training for role-aware text labels
+  - [x] 6.1 Modify text formatting in data_collection/collect_data.py
+    - Implement format_clip_text() function
+    - Add "AMBULANCE" prefix for Agent 0 labels
+    - Add "YIELD" prefix for Agents 1-3 labels
+    - Include ambulance_dist in scene dict for normal agents when applicable
+    - _Requirements: 6.1, 6.2, 6.3_
+  - [x] 6.2 Update dataset.jsonl format
+    - Add "role" field to each agent record
+    - Add "ambulance_dist" field to normal agent scene dicts
+    - _Requirements: 6.2, 6.3_
+  - [x] 6.3 Verify CLIP training pipeline compatibility
+    - Test DrivingPairs dataset loads heterogeneous data
+    - Verify role-prefixed text labels are processed correctly
+    - _Requirements: 6.4, 6.5_
+
+- [x] 7. Integrate heterogeneous mode into MAPPO training
+  - [x] 7.1 Update training/train_mappo.py to detect heterogeneous mode
+    - Read heterogeneous_agents flag from environment config
+    - Read agent_roles list from config
+    - Instantiate HeterogeneousVLAActorCritic if heterogeneous mode
+    - Instantiate VLAActorCritic if homogeneous mode (backward compatibility)
+    - _Requirements: 10.1, 10.2_
+  - [x] 7.2 Modify rollout collection for per-agent rewards
+    - Check if heterogeneous mode is enabled
+    - Call compute_heterogeneous_rewards() instead of mean reward
+    - Store per-agent rewards in trajectory buffer
+    - _Requirements: 10.3_
+  - [x] 7.3 Update PPO update loop for heterogeneous networks
+    - Ensure gradients flow to both ambulance_actor and normal_actor
+    - Verify optimizer includes parameters from both sub-networks
+    - _Requirements: 10.5_
+  - [x] 7.4 Update model saving for heterogeneous mode
+    - Save to models/vla_mappo_heterogeneous_{scenario}.pth
+    - Include agent_roles in saved config
+    - _Requirements: 10.6_
+
+- [x] 8. Add priority passage metrics and logging
+  - [x] 8.1 Implement metrics tracking in training/train_mappo.py
+    - Track ambulance_average_speed across episodes
+    - Track lane_clearance_rate (% timesteps not blocking)
+    - Track collision_rate separately for ambulance vs normal
+    - Track priority_passage_success (ambulance reaches goal without collision)
+    - _Requirements: 9.1, 9.2, 9.3, 9.4_
+  - [x] 8.2 Add TensorBoard logging for heterogeneous metrics
+    - Log ambulance metrics under "ambulance/" namespace
+    - Log normal agent metrics under "normal/" namespace
+    - Log combined metrics under "heterogeneous/" namespace
+    - _Requirements: 9.5_
+
+- [x] 9. Add visual distinction for agent roles
+  - [x] 9.1 Implement vehicle color customization in environment
+    - Modify environment rendering to use agent_colors from config
+    - Set Agent 0 (ambulance) to red (255, 0, 0)
+    - Set Agents 1-3 (normal) to green (0, 255, 0)
+    - Set NPC vehicles to blue (0, 0, 255)
+    - _Requirements: 1.3, 8.1, 8.2, 8.3_
+  - [x] 9.2 Verify color distinction in collected data
+    - Collect sample frames in heterogeneous mode
+    - Verify red ambulance is visible
+    - Verify green normal agents are visible
+    - _Requirements: 8.4_
+  - [x] 9.3 Add sample frame logging to TensorBoard
+    - Log sample frames during data collection
+    - Log sample frames during MAPPO training
+    - _Requirements: 8.5_
+
+- [ ] 10. Test and validate heterogeneous system
+  - [x] 10.1 Unit test role encoding
+    - Test add_role_encoding() with known configurations
+    - Verify output shape (64,) and role values (0.0, 1.0, 2.0)
+    - _Requirements: 2.1, 2.2, 2.3_
+  - [x] 10.2 Unit test heterogeneous actor
+    - Test forward pass routes Agent 0 to ambulance_actor
+    - Test forward pass routes Agents 1-3 to normal_actor
+    - Test gradient flow through both sub-networks
+    - _Requirements: 3.1, 3.2, 3.3, 3.4_
+  - [x] 10.3 Unit test asymmetric rewards
+    - Test compute_heterogeneous_rewards() with various scenarios
+    - Verify ambulance gets speed-based reward
+    - Verify normal agents get lane_clearance and blocking_penalty
+    - _Requirements: 4.1, 4.2, 4.3, 4.4_
+  - [x] 10.4 Unit test expert heuristics
+    - Test _ambulance_expert_action() prioritizes FASTER
+    - Test _normal_expert_action() yields when ambulance behind
+    - Test fallback to safety logic
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
+  - [x] 10.5 Integration test data collection
+    - Collect 10 episodes in heterogeneous mode
+    - Verify dataset.jsonl has role field
+    - Verify Agent 0 has role="ambulance"
+    - Verify Agents 1-3 have role="normal"
+    - Verify ambulance_dist field present when applicable
+    - _Requirements: 6.1, 6.2, 6.3_
+  - [x] 10.6 Integration test CLIP training
+    - Train CLIP for 1 epoch on heterogeneous data
+    - Verify text labels have "AMBULANCE" and "YIELD" prefixes
+    - Verify loss decreases
+    - _Requirements: 6.4, 6.5_
+  - [ ] 10.7 Integration test MAPPO training
+    - Train MAPPO for 1000 steps in heterogeneous mode
+    - Verify HeterogeneousVLAActorCritic is instantiated
+    - Verify per-agent rewards are computed
+    - Verify both sub-networks receive gradient updates
+    - _Requirements: 10.1, 10.2, 10.3, 10.5_
+  - [ ] 10.8 End-to-end test heterogeneous pipeline
+    - Collect 50 episodes per scenario in heterogeneous mode
+    - Verify visual distinction (red ambulance, green normal)
+    - Fine-tune CLIP for 2 epochs
+    - Train MAPPO for 10k steps
+    - Evaluate: ambulance speed > 25 m/s, clearance rate > 60%, collision < 20%
+    - _Requirements: 9.1, 9.2, 9.3, 9.4_
+
+- [x] 11. Documentation and examples
+  - [x] 11.1 Update README.md with heterogeneous mode instructions
+    - Document heterogeneous_agents configuration flag
+    - Provide example commands for heterogeneous data collection
+    - Provide example commands for heterogeneous MAPPO training
+    - _Requirements: 7.1, 7.2_
+  - [x] 11.2 Create example configuration files
+    - Provide highway_heterogeneous.yaml
+    - Provide merge_heterogeneous.yaml
+    - Provide intersection_heterogeneous.yaml
+    - _Requirements: 7.1, 7.5_
+  - [x] 11.3 Add heterogeneous mode to run.sh script
+    - Add --heterogeneous flag to data collection commands
+    - Add --heterogeneous flag to MAPPO training commands
+    - Document usage in script comments
+    - _Requirements: 7.1_

@@ -1,0 +1,17 @@
+# Core dependencies
+gymnasium>=0.29.0
+highway-env>=1.8.0
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.30.0
+tensorboard>=2.13.0
+
+# Image processing
+Pillow>=10.0.0
+
+# Data handling
+numpy>=1.24.0
+pyyaml>=6.0
+
+# Utilities
+tqdm>=4.65.0

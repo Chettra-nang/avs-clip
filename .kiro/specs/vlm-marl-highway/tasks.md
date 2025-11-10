@@ -1,0 +1,158 @@
+# Implementation Plan
+
+- [x] 1. Set up project structure and dependencies
+  - Create directory structure: configs/envs/, common/, envs/, data_collection/, models/, training/
+  - Create requirements.txt with all dependencies (gymnasium, highway-env, torch, transformers, tensorboard, etc.)
+  - Create empty __init__.py files for Python package structure
+  - _Requirements: 6.1, 6.2_
+
+- [x] 2. Implement common utilities and logging infrastructure
+  - [x] 2.1 Implement TensorBoard logger wrapper (common/logger_tb.py)
+    - Create TBLogger class with scalar, image, text, and close methods
+    - Wrap torch.utils.tensorboard.SummaryWriter with automatic directory creation
+    - _Requirements: 5.1, 5.2, 5.3_
+  - [x] 2.2 Implement utility functions (common/utils.py)
+    - Implement ACTIONS_ALL dictionary mapping action IDs to names
+    - Implement ttc() function for time-to-collision calculation with epsilon handling
+    - Implement risk_score() function with weighted combination (40% TTC, 30% distance, 30% relative velocity)
+    - _Requirements: 2.1, 6.4_
+
+- [x] 3. Create environment configuration system
+  - [x] 3.1 Create YAML configs for three scenarios (configs/envs/)
+    - Create highway.yaml with MultiAgentObservation, MultiAgentAction, controlled_vehicles=4
+    - Create merge.yaml with scenario-specific spawn rates and traffic density
+    - Create intersection.yaml with id_candidates fallback list [intersection-v1, intersection-v0]
+    - _Requirements: 1.1, 1.2, 1.5, 6.2_
+  - [x] 3.2 Implement environment factory (common/scenario.py, envs/make_env.py)
+    - Implement make_hwy_env_from_yaml() to load YAML and create Gymnasium environment
+    - Handle id_candidates list for robust fallback
+    - Implement make_env() factory function with scenario string input
+    - _Requirements: 1.1, 1.5, 6.3_
+
+- [x] 4. Implement data collection pipeline
+  - [x] 4.1 Implement vehicle state extraction and scene analysis
+    - Implement _vehicle_state() to extract position, velocity, speed, heading
+    - Implement scene scanning to find nearby vehicles within 60m radius
+    - Compute min TTC, min distance, max risk for each controlled vehicle
+    - Determine lane availability (can_left, can_right) using road network
+    - _Requirements: 2.1, 7.1_
+  - [x] 4.2 Implement expert heuristic for action labeling
+    - Implement _expert_action() with TTC-based emergency logic (< 2.0s)
+    - Add distance-based caution logic (< 20m)
+    - Add random exploration for lane changes (12% probability)
+    - Add speed optimization (FASTER vs IDLE)
+    - _Requirements: 2.4_
+  - [x] 4.3 Implement quality filtering and data saving
+    - Compute quality score as weighted average across agents
+    - Implement save logic: quality > 0.5 OR random < 0.25
+    - Implement center crop to 224×224 using PIL
+    - Save images as PNG and write JSON records to dataset.jsonl
+    - _Requirements: 2.2, 2.3, 2.6_
+  - [x] 4.4 Implement collection loop with TensorBoard logging
+    - Create CollectCfg dataclass with scenario, episodes, max_steps parameters
+    - Implement episode loop with environment reset and step
+    - Log quality, action distributions, traffic metrics to TensorBoard
+    - Save metadata.json with collection statistics
+    - _Requirements: 2.5, 2.6, 5.2_
+
+- [x] 5. Implement CLIP encoder and fine-tuning
+  - [x] 5.1 Implement CLIP wrapper (models/clip_encoder.py)
+    - Create CLIPBackbone class wrapping HuggingFace CLIPModel and CLIPProcessor
+    - Implement img_embed() method with @torch.no_grad() decorator
+    - Implement txt_embed() method for text encoding
+    - Add trainable parameter to freeze/unfreeze weights
+    - _Requirements: 3.1, 3.5_
+  - [x] 5.2 Implement dataset class for driving pairs (training/train_clip.py)
+    - Create DrivingPairs dataset loading from multiple scenario directories
+    - Parse dataset.jsonl and create (image, text) pairs
+    - Format text as "{action_name}: {scene_dict}"
+    - _Requirements: 3.2, 3.3_
+  - [x] 5.3 Implement CLIP fine-tuning loop
+    - Load openai/clip-vit-base-patch32 model and processor
+    - Create DataLoader with batch_size=64, num_workers=4
+    - Implement training loop with AdamW optimizer (lr=1e-5)
+    - Log loss, sample images, sample texts to TensorBoard every 100 steps
+    - Save fine-tuned model to models/clip/ directory
+    - _Requirements: 3.1, 3.3, 3.4, 3.5_
+
+- [x] 6. Implement VLA Actor-Critic architecture
+  - [x] 6.1 Implement VLAActorCritic network (models/vla_mappo.py)
+    - Load fine-tuned CLIP model and freeze weights
+    - Implement decentralized actor: Linear(obs_dim+512, 512) → ReLU → Linear(512, 256) → ReLU → Linear(256, n_actions)
+    - Implement centralized critic: Linear(n_agents*obs_dim+512, 512) → ReLU → Linear(512, 256) → ReLU → Linear(256, 1)
+    - Implement _embed() method to extract CLIP image embeddings with optional text prompt
+    - _Requirements: 4.1, 4.2_
+  - [x] 6.2 Implement forward pass with CLIP fusion
+    - Repeat CLIP embedding for each agent in actor forward pass
+    - Concatenate per-agent kinematics with CLIP embeddings for actor
+    - Concatenate joint kinematics with CLIP embedding for critic
+    - Return action logits [n_agents, n_actions] and value [1, 1]
+    - _Requirements: 4.1, 4.2, 4.3_
+
+- [x] 7. Implement MAPPO training pipeline
+  - [x] 7.1 Implement observation flattening utilities (training/train_mappo.py)
+    - Implement flatten_obs_tuple() to convert tuple observations to per-agent and joint arrays
+    - Handle numpy array flattening and stacking
+    - _Requirements: 7.1, 7.2_
+  - [x] 7.2 Implement rollout collection
+    - Initialize environment and reset to get initial observations
+    - Render RGB frame and encode with CLIP each step
+    - Flatten observations to per-agent and joint arrays
+    - Forward pass through actor-critic to get logits and value
+    - Sample actions using Categorical distribution
+    - Convert action tensors to tuple of ints for environment step
+    - Store transitions (obs, joint, act, logp, reward, value, done, clip_emb)
+    - Handle reward format (tuple vs scalar) by computing mean if tuple
+    - _Requirements: 4.3, 7.3, 7.4, 7.5_
+  - [x] 7.3 Implement GAE computation
+    - Compute TD deltas with gamma=0.99
+    - Compute GAE with lambda=0.95
+    - Compute returns as advantages + values
+    - Return advantages and returns arrays
+    - _Requirements: 4.4_
+  - [x] 7.4 Implement PPO update
+    - Create Adam optimizer with lr=3e-4
+    - Normalize advantages (mean=0, std=1)
+    - Loop over PPO epochs (4 epochs)
+    - For each timestep: forward pass, compute policy loss (clipped surrogate), value loss (MSE), entropy
+    - Compute total loss: policy_loss + 0.5*value_loss - 0.01*entropy
+    - Backward pass with gradient clipping (max_norm=0.5)
+    - _Requirements: 4.5_
+  - [x] 7.5 Implement training loop with TensorBoard logging
+    - Parse command-line arguments (scenario, steps, horizon, logdir, clip_dir)
+    - Initialize environment and get observation dimensions
+    - Create VLAActorCritic network and move to device
+    - Create TensorBoard logger
+    - Loop until total_steps >= max_steps: collect rollout, compute GAE, PPO update
+    - Log episode returns, policy loss, value loss, entropy to TensorBoard
+    - Log average return over last 100 episodes every 10 iterations
+    - Save trained model to models/vla_mappo_{scenario}.pth
+    - _Requirements: 4.6, 4.7, 5.2, 5.5_
+
+- [x] 8. Create orchestration and documentation
+  - [x] 8.1 Create run.sh script
+    - Add shebang and set -e for error handling
+    - Add data collection commands for all three scenarios
+    - Add CLIP fine-tuning command
+    - Add MAPPO training command with scenario selection
+    - Add comment for TensorBoard launch command
+    - _Requirements: 6.5_
+  - [x] 8.2 Create README.md with usage instructions
+    - Document installation steps (pip install -r requirements.txt)
+    - Document data collection usage with command examples
+    - Document CLIP fine-tuning usage
+    - Document MAPPO training usage with hyperparameters
+    - Document TensorBoard visualization (tensorboard --logdir runs)
+    - Include design rationale with citations (highway-env docs, MAPPO paper, DriveLM paper, PyTorch docs)
+    - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
+
+- [x] 9. Verify multi-agent functionality end-to-end
+  - Run data collection for 10 episodes on highway scenario
+  - Verify dataset.jsonl contains records with 4 agents per frame
+  - Verify action distribution is reasonable (not all one action)
+  - Run CLIP fine-tuning for 1 epoch on collected data
+  - Verify loss decreases and model saves successfully
+  - Run MAPPO training for 1000 steps on highway scenario
+  - Verify episode returns are logged and model saves successfully
+  - Launch TensorBoard and verify all metrics are visible
+  - _Requirements: 1.1, 1.3, 1.4, 2.5, 3.4, 4.6, 5.2, 5.5, 7.3, 7.4, 7.5_

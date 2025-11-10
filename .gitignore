@@ -1,0 +1,134 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+avs_venv/
+
+# PyTorch
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+checkpoint/
+checkpoints/
+
+# Data and Models
+data/
+data_*/
+models/clip/
+models/clip_*/
+models/clip_verify/
+models/*.pth
+models/*.safetensors
+*.jsonl
+*.json
+!configs/**/*.json
+!configs/**/*.yaml
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+images/
+frames/
+
+# TensorBoard
+runs/
+logs/
+tensorboard/
+events.out.tfevents.*
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Temporary files
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project specific - Test files and summaries
+test_*/
+*_test/
+test_*.py
+test_*.png
+test_*.jpg
+TASK_*.md
+*_SUMMARY.md
+*_IMPLEMENTATION.md
+*_FIX.md
+*_ANALYSIS.md
+*_GUIDE.md
+verification_*.txt
+
+# Keep important files
+!README.md
+!requirements.txt
+!run.sh
+!verify_agent_spacing.py
+!data_collection/instruction_generator.py
+!SETUP_GUIDE.md
+!QUICK_START.md
+!DEPLOYMENT_CHECKLIST.md
+!DIVERSITY_IMPROVEMENT_SUMMARY.md
+
+# Specs (optional - uncomment if you want to exclude)
+# .kiro/
