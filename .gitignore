@@ -41,7 +41,6 @@ checkpoints/
 
 # Data and Models
 data/
-data_*/
 models/clip/
 models/clip_*/
 models/clip_verify/
