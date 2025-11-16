@@ -366,8 +366,11 @@ def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Train MAPPO with VLA")
     parser.add_argument("--scenario", type=str, default="highway", 
-                        choices=["highway", "merge", "intersection"],
-                        help="Scenario to train on")
+                        choices=["highway", "merge", "intersection",
+                                "highway_heterogeneous", "merge_heterogeneous", 
+                                "intersection_heterogeneous", "highway_heterogeneous_dense",
+                                "merge_multi_agent"],
+                        help="Scenario to train on (use *_heterogeneous for ambulance priority, merge_multi_agent for custom multi-agent merge)")
     parser.add_argument("--steps", type=int, default=100000,
                         help="Maximum training steps")
     parser.add_argument("--horizon", type=int, default=256,

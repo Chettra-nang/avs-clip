@@ -1,13 +1,21 @@
 id: merge-v0
 render_mode: rgb_array
 
+# ⚠️ WARNING: merge-v0 is NOT RECOMMENDED for ambulance priority scenarios!
+# 
+# Issues with merge-v0:
+# 1. Only supports 1 controlled vehicle (not true multi-agent)
+# 2. Hardcoded _make_vehicles() creates unavoidable traffic jams
+# 3. Merge ramp geometry causes frequent collisions
+# 4. Episodes terminate early due to crashes (ambulance gets stuck)
+#
+# RECOMMENDATION: Use highway_heterogeneous or intersection_heterogeneous instead!
+# This config is kept for reference/testing only.
+
 # Heterogeneous agent configuration
 heterogeneous_agents: true
 agent_roles:
-  - ambulance
-  - normal
-  - normal
-  - normal
+  - ambulance  # Only this agent will be created in merge-v0
 
 # Visual distinction for agent roles
 agent_colors:
@@ -33,10 +41,15 @@ config:
       type: DiscreteMetaAction
       lateral: true
       longitudinal: true
-  controlled_vehicles: 4
-  spawn_probability: 0.6
-  vehicles_count: 50
-  duration: 40
+  controlled_vehicles: 1  # merge-v0 only supports 1 controlled vehicle
+  spawn_probability: 0.3  # Reduced from 0.6 to give ambulance more space
+  vehicles_count: 20  # Reduced from 50 to reduce traffic density
+  duration: 60  # Increased from 40 to allow more time to complete
+  # Rendering settings (square aspect ratio to prevent distortion)
+  scaling: 7.0
+  screen_width: 600
+  screen_height: 600  # Square aspect ratio (was 150)
+  centering_position: [0.3, 0.5]
   collision_reward: -1
   right_lane_reward: 0.1
   high_speed_reward: 0.4

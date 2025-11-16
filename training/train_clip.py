@@ -7,6 +7,7 @@ import argparse
 from pathlib import Path
 from typing import List, Tuple
 
+import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
@@ -115,7 +116,8 @@ def train_clip(
     lr: float = 1e-5,
     num_workers: int = 4,
     log_dir: str = "runs/clip",
-    save_dir: str = "models/clip"
+    save_dir: str = "models/clip",
+    device: str = "cuda"
 ):
     """
     Fine-tune CLIP on driving image-instruction pairs.
@@ -129,9 +131,10 @@ def train_clip(
         num_workers: Number of DataLoader workers
         log_dir: TensorBoard log directory
         save_dir: Directory to save fine-tuned model
+        device: Device to use ('cuda' or 'cpu')
     """
     # Setup device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(device if torch.cuda.is_available() and device == "cuda" else "cpu")
     print(f"Using device: {device}")
     
     # Load model and processor
@@ -215,8 +218,10 @@ def train_clip(
                 
                 # Log sample images (first 4 in batch)
                 for i in range(min(4, len(images))):
-                    img_array = torch.tensor(images[i]).permute(2, 0, 1).numpy()
-                    logger.image(f"samples/image_{i}", img_array, global_step, dataformats='CHW')
+                    # Convert PIL Image to numpy array
+                    img_pil = Image.open(images[i]) if isinstance(images[i], str) else images[i]
+                    img_array = np.array(img_pil)  # [H, W, 3]
+                    logger.image(f"samples/image_{i}", img_array, global_step, dataformats='HWC')
                 
                 # Log sample texts
                 sample_texts = "\n".join([f"{i}: {texts[i]}" for i in range(min(4, len(texts)))])
@@ -288,6 +293,13 @@ def main():
         default="models/clip",
         help="Directory to save fine-tuned model"
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        choices=["cuda", "cpu"],
+        help="Device to use for training (cuda or cpu)"
+    )
     
     args = parser.parse_args()
     
@@ -299,6 +311,7 @@ def main():
         lr=args.lr,
         num_workers=args.num_workers,
         log_dir=args.log_dir,
+        device=args.device,
         save_dir=args.save_dir
     )
 

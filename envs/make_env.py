@@ -2,6 +2,7 @@
 import os
 import gymnasium as gym
 import highway_env  # Register highway-env environments
+import custom_envs  # Register custom environments
 from typing import Tuple, Optional, Dict
 from common.scenario import make_hwy_env_from_yaml
 
@@ -25,26 +26,30 @@ def make_env(scenario: str, heterogeneous: bool = False) -> Tuple[gym.Env, Optio
         ValueError: If scenario name is invalid
         FileNotFoundError: If config file doesn't exist
     """
-    # Auto-detect heterogeneous mode from scenario name
-    if '_heterogeneous' in scenario:
-        heterogeneous = True
-        base_scenario = scenario.replace('_heterogeneous', '').replace('_dense', '')
+    # Handle special case: merge_multi_agent uses custom environment
+    if scenario == 'merge_multi_agent':
+        config_path = os.path.join('configs', 'envs', 'merge_multi_agent.yaml')
     else:
-        base_scenario = scenario
-    
-    # Remove _dense suffix if present
-    base_scenario = base_scenario.replace('_dense', '')
-    
-    valid_scenarios = ['highway', 'merge', 'intersection']
-    
-    if base_scenario not in valid_scenarios:
-        raise ValueError(f"Invalid scenario '{scenario}'. Base scenario must be one of {valid_scenarios}")
-    
-    # Construct path to YAML config
-    if heterogeneous:
-        config_path = os.path.join('configs', 'envs', f'{base_scenario}_heterogeneous.yaml')
-    else:
-        config_path = os.path.join('configs', 'envs', f'{base_scenario}.yaml')
+        # Auto-detect heterogeneous mode from scenario name
+        if '_heterogeneous' in scenario:
+            heterogeneous = True
+            base_scenario = scenario.replace('_heterogeneous', '').replace('_dense', '')
+        else:
+            base_scenario = scenario
+        
+        # Remove _dense suffix if present
+        base_scenario = base_scenario.replace('_dense', '')
+        
+        valid_scenarios = ['highway', 'merge', 'intersection']
+        
+        if base_scenario not in valid_scenarios:
+            raise ValueError(f"Invalid scenario '{scenario}'. Base scenario must be one of {valid_scenarios}")
+        
+        # Construct path to YAML config
+        if heterogeneous:
+            config_path = os.path.join('configs', 'envs', f'{base_scenario}_heterogeneous.yaml')
+        else:
+            config_path = os.path.join('configs', 'envs', f'{base_scenario}.yaml')
     
     # Load and create environment
     env, heterogeneous_config = make_hwy_env_from_yaml(config_path)

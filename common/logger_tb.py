@@ -18,7 +18,10 @@ class TBLogger:
         """
         self.log_path = os.path.join(log_dir, name)
         os.makedirs(self.log_path, exist_ok=True)
+        # Ensure directory is fully created before initializing writer
+        os.sync() if hasattr(os, 'sync') else None
         self.writer = SummaryWriter(log_dir=self.log_path)
+        self.writer.flush()  # Flush immediately after creation
     
     def scalar(self, tag: str, value: float, step: int):
         """

@@ -1,5 +1,23 @@
-id: merge-v0
+id: merge-multi-agent-v0
 render_mode: rgb_array
+
+# Custom multi-agent merge environment
+# This uses our custom MultiAgentMergeEnv that properly supports 4 controlled vehicles
+
+# Heterogeneous agent configuration
+heterogeneous_agents: true
+agent_roles:
+  - ambulance
+  - normal
+  - normal
+  - normal
+
+# Visual distinction for agent roles
+agent_colors:
+  ambulance: [255, 0, 0]  # Red
+  normal: [0, 255, 0]     # Green
+  npc: [0, 0, 255]        # Blue
+
 config:
   observation:
     type: MultiAgentObservation
@@ -16,13 +34,12 @@ config:
       lateral: true
       longitudinal: true
   controlled_vehicles: 4
-  spawn_probability: 0.6
-  vehicles_count: 50
+  vehicles_count: 8  # Reduced traffic density
   duration: 40
-  # Rendering settings (square aspect ratio to prevent distortion)
+  # Rendering settings (square aspect ratio to match highway/intersection)
   scaling: 7.0
   screen_width: 600
-  screen_height: 600  # Square aspect ratio (was 150)
+  screen_height: 600  # Changed from 150 to 600 for square aspect ratio
   centering_position: [0.3, 0.5]
   collision_reward: -1
   right_lane_reward: 0.1

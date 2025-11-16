@@ -165,9 +165,10 @@ def _ambulance_expert_action(ego_vehicle, nearby_vehicles: list,
     Priority: Speed > Lane changes > Safety
     
     Logic:
-    1. If front clear (> 30m): FASTER
-    2. If obstacle ahead (< 30m): Try lane change (prefer LANE_LEFT for passing)
-    3. Default: FASTER (maintain speed)
+    1. If obstacle very close (< 15m): Emergency - try lane change or slow down
+    2. If obstacle ahead (< 40m): Try lane change (prefer LANE_LEFT for passing)
+    3. If front clear (> 40m): FASTER
+    4. Default: IDLE (maintain speed)
     
     Args:
         ego_vehicle: Ambulance vehicle object
@@ -182,8 +183,10 @@ def _ambulance_expert_action(ego_vehicle, nearby_vehicles: list,
     # Find closest vehicle ahead
     front_vehicle = None
     front_dist = 999.0
+    front_speed = 0.0
     
     ego_pos = np.array([ego_vehicle.position[0], ego_vehicle.position[1]])
+    ego_speed = ego_vehicle.speed
     
     for vehicle in nearby_vehicles:
         if vehicle is ego_vehicle:
@@ -198,25 +201,49 @@ def _ambulance_expert_action(ego_vehicle, nearby_vehicles: list,
                 if dist < front_dist:
                     front_dist = dist
                     front_vehicle = vehicle
+                    front_speed = vehicle.speed
     
-    # Aggressive logic: prioritize speed when front is clear
-    if front_dist > 30.0:
-        return 3  # FASTER
-    
-    # Obstacle ahead: try to change lanes
-    if front_dist < 30.0 and front_vehicle is not None:
-        # Prefer left lane for passing (60% probability)
+    # Emergency: very close obstacle - MUST slow down
+    if front_dist < 20.0:
+        # If extremely close, brake immediately
+        if front_dist < 10.0:
+            return 4  # SLOWER (emergency brake)
+        # Otherwise try to change lanes while slowing
+        if ego_speed > front_speed + 5.0:  # Approaching too fast
+            return 4  # SLOWER (slow down first)
+        # Try lane change if speed difference is manageable
         if can_left and rng.random() < 0.6:
             return 0  # LANE_LEFT
         elif can_right:
             return 2  # LANE_RIGHT
         elif can_left:
-            return 0  # LANE_LEFT (fallback if right not available)
+            return 0  # LANE_LEFT
         else:
-            return 1  # IDLE (wait for gap)
+            return 4  # SLOWER
+    
+    # Obstacle ahead: try to change lanes if approaching slower vehicle
+    if front_dist < 50.0 and front_vehicle is not None:
+        # Check if we're approaching (our speed > their speed)
+        if ego_speed > front_speed + 3.0:  # 3 m/s buffer
+            # Prefer left lane for passing (60% probability)
+            if can_left and rng.random() < 0.6:
+                return 0  # LANE_LEFT
+            elif can_right:
+                return 2  # LANE_RIGHT
+            elif can_left:
+                return 0  # LANE_LEFT (fallback)
+            else:
+                return 4  # SLOWER (can't pass, slow down)
+        else:
+            # Similar speed, maintain
+            return 1  # IDLE
+    
+    # Front clear: accelerate
+    if front_dist > 40.0:
+        return 3  # FASTER
     
     # Default: maintain speed
-    return 3  # FASTER
+    return 1  # IDLE
 
 
 def _normal_expert_action(ego_vehicle, nearby_vehicles: list, 
@@ -815,8 +842,8 @@ def main():
     parser.add_argument('--scenario', type=str, required=True,
                        choices=['highway', 'merge', 'intersection',
                                'highway_heterogeneous', 'merge_heterogeneous', 'intersection_heterogeneous',
-                               'highway_heterogeneous_dense'],
-                       help='Scenario name (use *_heterogeneous for emergency vehicle priority mode, *_dense for tighter spacing)')
+                               'highway_heterogeneous_dense', 'merge_multi_agent'],
+                       help='Scenario name (use *_heterogeneous for emergency vehicle priority mode, *_dense for tighter spacing, merge_multi_agent for custom multi-agent merge)')
     parser.add_argument('--episodes', type=int, default=100,
                        help='Number of episodes to collect')
     parser.add_argument('--max-steps', type=int, default=1000,

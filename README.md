@@ -182,7 +182,11 @@ python data_collection/collect_data.py \
 ```
 
 **Parameters:**
-- `--scenario`: Scenario name (`highway`, `merge`, `intersection`, or `*_heterogeneous` variants)
+- `--scenario`: Scenario name
+  - Standard: `highway`, `merge`, `intersection`
+  - Heterogeneous (ambulance priority): `highway_heterogeneous`, `intersection_heterogeneous`, `merge_multi_agent`
+  - Dense traffic: `highway_heterogeneous_dense`
+  - ⚠️ Note: `merge_heterogeneous` not recommended (use `merge_multi_agent` instead)
 - `--episodes`: Number of episodes to collect (default: 100)
 - `--max-steps`: Maximum steps per episode (default: 1000)
 - `--output-dir`: Output directory for dataset (default: `data`)
@@ -257,7 +261,10 @@ python training/train_mappo.py \
 ```
 
 **Parameters:**
-- `--scenario`: Scenario to train on (`highway`, `merge`, `intersection`, or `*_heterogeneous` variants)
+- `--scenario`: Scenario to train on
+  - Standard: `highway`, `merge`, `intersection`
+  - Heterogeneous (ambulance priority): `highway_heterogeneous`, `intersection_heterogeneous`, `merge_multi_agent`
+  - Dense traffic: `highway_heterogeneous_dense`
 - `--steps`: Maximum training steps (default: 100000)
 - `--horizon`: Rollout horizon in steps (default: 256)
 - `--logdir`: TensorBoard log directory (default: `runs`)
