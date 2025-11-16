@@ -383,6 +383,12 @@ def main():
                         help="Learning rate")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                         help="Device to use (cuda/cpu)")
+    parser.add_argument("--vision_encoder", type=str, default="clip",
+                        choices=["clip", "dinov2"],
+                        help="Vision encoder to use (clip or dinov2)")
+    parser.add_argument("--dinov2_variant", type=str, default="base",
+                        choices=["small", "base", "large"],
+                        help="DINOv2 model variant (only used if vision_encoder=dinov2)")
     
     args = parser.parse_args()
     
@@ -419,34 +425,55 @@ def main():
     print(f"Number of actions: {n_actions}")
     
     # Create VLAActorCritic network (heterogeneous or homogeneous)
-    # Check if fine-tuned CLIP exists, otherwise use pretrained
-    if os.path.exists(args.clip_dir):
-        clip_model_path = args.clip_dir
-        print(f"Loading fine-tuned CLIP from: {clip_model_path}")
-    else:
-        clip_model_path = "openai/clip-vit-base-patch32"
-        print(f"Using pretrained CLIP: {clip_model_path}")
+    # Check if using DINOv2 or CLIP
+    use_dinov2 = args.vision_encoder == 'dinov2'
     
-    # Instantiate appropriate model based on mode
-    if is_heterogeneous:
-        net = HeterogeneousVLAActorCritic(
-            obs_dim=obs_dim,
-            n_agents=n_agents,
-            n_actions=n_actions,
-            clip_model_path=clip_model_path,
-            agent_roles=agent_roles,
-            device=device
-        )
-        print("Created HeterogeneousVLAActorCritic network")
+    if use_dinov2:
+        # Use DINOv2
+        from models.dinov2_mappo import DINOv2HeterogeneousVLAActorCritic
+        
+        if is_heterogeneous:
+            net = DINOv2HeterogeneousVLAActorCritic(
+                obs_dim=obs_dim,
+                n_agents=n_agents,
+                n_actions=n_actions,
+                dinov2_variant=args.dinov2_variant,
+                agent_roles=agent_roles,
+                device=device
+            )
+            print(f"Created DINOv2HeterogeneousVLAActorCritic network (variant={args.dinov2_variant})")
+        else:
+            raise NotImplementedError("DINOv2 only supports heterogeneous mode currently")
     else:
-        net = VLAActorCritic(
-            obs_dim=obs_dim,
-            n_agents=n_agents,
-            n_actions=n_actions,
-            clip_model_path=clip_model_path,
-            device=device
-        )
-        print("Created VLAActorCritic network")
+        # Use CLIP
+        # Check if fine-tuned CLIP exists, otherwise use pretrained
+        if os.path.exists(args.clip_dir):
+            clip_model_path = args.clip_dir
+            print(f"Loading fine-tuned CLIP from: {clip_model_path}")
+        else:
+            clip_model_path = "openai/clip-vit-base-patch32"
+            print(f"Using pretrained CLIP: {clip_model_path}")
+        
+        # Instantiate appropriate model based on mode
+        if is_heterogeneous:
+            net = HeterogeneousVLAActorCritic(
+                obs_dim=obs_dim,
+                n_agents=n_agents,
+                n_actions=n_actions,
+                clip_model_path=clip_model_path,
+                agent_roles=agent_roles,
+                device=device
+            )
+            print("Created HeterogeneousVLAActorCritic network")
+        else:
+            net = VLAActorCritic(
+                obs_dim=obs_dim,
+                n_agents=n_agents,
+                n_actions=n_actions,
+                clip_model_path=clip_model_path,
+                device=device
+            )
+            print("Created VLAActorCritic network")
     
     # Create optimizer with lr=3e-4
     optimizer = torch.optim.Adam(net.parameters(), lr=args.lr)
