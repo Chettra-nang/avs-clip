@@ -33,7 +33,7 @@ ACTION_TEMPLATES = {
         "Changing to left lane on highway"
     ],
     'IDLE': [
-        "A car maintaining current speed and lane",
+        "A car ma intaining current speed and lane",
         "Vehicle staying in current lane",
         "Maintaining speed on highway"
     ],
@@ -212,7 +212,8 @@ def evaluate_action_classification(model, processor, samples: List[Dict], device
         print(f"  {action:12s}: {per_action_acc[action]:5.2f}%")
     
     print("\nConfusion Matrix:")
-    print(f"{'True \\ Pred':<12s}", end="")
+    header = "True \\ Pred"
+    print(f"{header:<12s}", end="")
     for action in ACTIONS:
         print(f"{action[:8]:>8s}", end="")
     print()
